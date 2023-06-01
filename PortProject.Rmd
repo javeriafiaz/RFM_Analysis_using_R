@@ -1,0 +1,798 @@
+---
+title: "Portfolio_Project"
+output: html_document
+date: "2023-04-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Libraries
+
+```{r libraries}
+library(lubridate)
+library(Hmisc)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(treemap)
+library(shiny)
+library(flexdashboard)
+library(plotly)
+```
+
+# Data
+```{r}
+library(readxl)
+Sample_EU_Superstore <- read_excel("I:/IEC/Sample/Sample - EU Superstore.xls")
+```
+
+# View Data
+```{r view data}
+view(Sample_EU_Superstore)
+```
+
+# Change Data frame Name
+```{r change name of data frame}
+superStore <- Sample_EU_Superstore
+view(superStore)
+```
+
+# what does each row represent?
+```{r}
+head(superStore)
+```
+
+Unique combination of order id and product id
+
+# confirming
+```{r}
+superStore |> 
+    distinct(`Order ID`, `Product ID`) |> 
+    nrow()
+```
+
+10000-9991 = found 9 rows with duplication
+
+## extracting product id duplicates
+```{r}
+superStore |> 
+    group_by(`Order ID`) |> 
+    count(`Product ID`) |> 
+    head(10)
+```
+### another way to do the same
+```{r}
+superStore |> 
+    group_by(`Order ID`, `Product ID`) |> 
+    summarise(n = n()) |>
+    head(10)
+```
+## observing duplicate rows
+```{r}
+superStore |> 
+    group_by(`Order ID`) |> 
+    count(`Product ID`) |> 
+    arrange(desc(n)) |> 
+    head(10)
+
+superStore |> 
+    group_by(`Order ID`) |> 
+    count(`Product ID`) |> 
+    filter(n > 1)
+```
+
+```{r}
+superStore |> 
+    group_by(`Order ID`) |> 
+    count(`Product ID`) |> 
+    filter(n > 1) |> 
+    inner_join(superStore) |> view()
+```
+ES-2016-3945862, ES-2018-1314291, ES-2018-5856066 with different `Customer ID`.
+
+## Check Negative Values in Sales
+```{r there are 10000 values that are greater than 0}
+sum(superStore$Sales > 0)
+```
+```{r sum of Sales}
+sum(superStore$Sales)
+```
+```{r sum of Sales that are less than 0}
+sum(superStore$Sales) < 0
+```
+```{r sum of Sales that are greater than 0}
+sum(superStore$Sales) > 0
+```
+
+## Chech Negative Values in Quantity
+```{r there are 10000 values that are greater than 0}
+sum(superStore$Quantity > 0)
+```
+```{r sum of Quantity}
+sum(superStore$Quantity)
+```
+```{r sum of Quantity that are less than 0}
+sum(superStore$Quantity) < 0
+```
+```{r sum of Quantity that are greater than 0}
+sum(superStore$Quantity) > 0 
+```
+```{r by filtering method}
+superStore |> 
+  filter(Quantity < 0) |> 
+  head(10) |> view()
+```
+
+
+## Chech Negative Values in Profit 
+```{r there are 7724 values that are greater than 0}
+sum(superStore$Profit > 0)
+```
+```{r there are 158 values that are 0}
+sum(superStore$Profit == 0)
+```
+```{r there are 2118 values that are less than 0}
+sum(superStore$Profit < 0)
+```
+```{r sum of Profit}
+sum(superStore$Profit)
+```
+```{r is there Profit less than 0 ?}
+sum(superStore$Profit < 0)
+head(superStore, 10)
+```
+```{r is there Profit greater than 0 ?}
+superStore$Profit > 0 
+```
+```{r by filtering method}
+superStore |> 
+  filter(Profit < 0) |> 
+  head(10) |> view()
+```
+```{r missing values }
+is.na(superStore$Profit)
+```
+```{r it is better to put is.na in sum function}
+sum(is.na(superStore$Profit))
+```
+```{r == 0 by filter method}
+superStore |> 
+  filter(Profit == 0) |> 
+  nrow() |> view()
+
+
+install.packages(shiny)
+```
+
+## Now Data frame is storeData
+```{r }
+storeData <- superStore
+```
+
+## Chage POSIX data type
+```{r}
+storeData <- storeData %>% mutate(`Order Date` = date(ymd(`Order Date`)),
+                                  `Ship Date` = date(ymd(`Ship Date`)))
+```
+
+## current date: 2019-01-31
+```{r}
+current_date <- lubridate::date("2019-01-31")
+class(current_date)
+```
+
+## Delay in shipping order
+```{r}
+storeData |> 
+  group_by(`Order ID`) |> 
+summarise(shipping_delay = as.integer(difftime(`Ship Date`, `Order Date`, units = "days"))) -> ship_delay 
+
+ship_delay |> 
+ggplot()+geom_point(aes(shipping_delay))+ggtitle("Delay in Shipping Product")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+## Day elapsed since current Date
+```{r}
+rfm |> 
+  group_by(customer_id, last_transaction) |> 
+  summarise(
+    current_date = lubridate::date("2019-01-31"),
+    days = difftime(current_date, last_transaction, units = "days")) |> 
+view() -> day_passed_since_last_vist2
+
+write.csv(day_passed_since_last_vist2, file = "Days Since Last Visit2.csv", row.names = FALSE)
+```
+
+## Finish Spaces between columns names
+```{r snake case}
+library(janitor)
+df_storeData <- janitor::clean_names(storeData)
+```
+
+## .rds
+```{r}
+readr::write_rds(df_storeData,"../R codes/df_storeData.rds")
+```
+
+
+```{r}
+df_storeData |> 
+  group_by(
+    customer_id, 
+    customer_name,
+    category
+  ) |> 
+  summarise(
+    category_sales = sum(sales)
+  ) -> category_customer_sales
+```
+
+```{r}
+write.csv(df_storeData, file = "Store.csv", row.names = FALSE)
+```
+
+
+```{r}
+category_customer_sales |> 
+  filter(customer_name == "Aaron Smayling") |> 
+  ggplot() + 
+  geom_col(aes(x = customer_name,
+               y = category_sales,
+               group = category, 
+               fill = category),
+           position = "fill" )
+  
+```
+
+```{r}
+plotly::ggplotly(
+category_customer_sales |> 
+  filter(customer_name == "Aaron Smayling") |> 
+  ggplot() + 
+  geom_col(aes(x = customer_name,
+               y = category_sales,
+               group = category, 
+               fill = category) ))
+```
+
+```{r Customer Data}
+df_storeData |> 
+  group_by(customer_id, customer_name) |> 
+  summarise(
+    totalSales = sum(sales),
+    no_of_transaction = n_distinct(order_id),
+    totalProfit = sum(profit),
+    totalDiscount = sum(discount),
+    quantityBuy = sum(quantity),
+    n_times_visit = n(),
+    last_transaction = max(order_date),
+    first_transaction = min(order_date),
+ 
+  ) |> 
+  mutate(recency = as.integer(difftime(current_date, last_transaction))) -> customer_data
+
+```
+n_times_visit is actually n_times_buy or n_times_transaction. 
+for example he/she buy eight times on 4 orders(n_distinct(order_id))
+## Practice
+```{r}
+df_storeData |> 
+  group_by(customer_id, customer_name) |> 
+  summarise(
+    totalSales = sum(sales),
+    no_of_transaction = n_distinct(order_id),
+    totalProfit = sum(profit),
+    totalDiscount = sum(discount),
+    quantityBuy = sum(quantity),
+    n_times_visit = n(),
+    last_transaction = max(order_date),
+    first_transaction = min(order_date),
+    mostCategory_buy = max(category),
+    lessCategory_buy = min(category),
+    n_times_category_buy = n_distinct(category),
+    mostcountry_visit = max(country),
+    lessCountry_visit = min(country),
+    n_of_shipmode_prefer = n_distinct(ship_mode),
+    most_shipmode_prefer = max(ship_mode),
+    less_shipmode_prefer = min(ship_mode), #AB-10165
+  ) |> 
+  mutate(recency = as.integer(difftime(current_date, last_transaction))) -> customer_data2
+```
+
+## Practice
+```{r}
+plotly::ggplotly(
+storeData |> 
+  group_by(Category) |> 
+  summarise(t_amount = sum(Sales)) |> 
+  
+  ggplot()+geom_bar(storeData, mapping= aes(x=Category, y= t_amount, fill = Category), stat = "sum"))
+
+  #ggplot(storeData, mapping= aes(x=Category, y= t_amount, fill = Category))+geom_bar(stat = "identity"))
+ggplot()+geom_bar(storeData, aes(x=Category, y= t_amount, fill = Category))
+```
+
+Note:
+1- In one order which category he prefered most = group_by(order_id)
+2- AOV = average amount spent each time a customer places an order, average amount of money customers spend each time they buy something
+3- no__of_transaction means number of orders, count of purchases
+4- n_times_visit = how many times he comes
+
+## Median Days Between Vists
+```{r}
+df_storeData |> 
+  group_by(customer_id, customer_name, order_id) |>
+  summarise(recent_date = max(order_date))|> 
+  mutate(gap_btw_visit = as.integer(recent_date - lag(recent_date, order_by = recent_date))) |> view()
+  summarise(median_of_gap_btw_visit = median(gap_btw_visit, na.rm = TRUE)) -> median_days
+  view(median_days)
+
+plotly::ggplotly(
+median_days |> 
+  
+ggplot()+geom_boxplot(aes(y=median_of_gap_btw_visit))+ggtitle("Median Elapsed Days")+
+  theme(plot.title = element_text(hjust = 0.5)) 
+)
+
+```
+
+Note:
+1- lag tells us difference between his 1st and 2nd visit and so on.
+2- If we did not use max, result will be wrong (majority NA values)
+3- We need one median value so it will be outside of mutate, not under group_by(order_id), otherwise we will get n no of median equal to no of order made by customer.
+e.g. One customer make three order there will be 3 median.
+4- At the end result will be base on customer_id 
+
+## Join Tables
+```{r }
+left_join(customer_data, median_days) -> rfm_data
+```
+
+## Join Tables
+```{r DATA_RFM}
+left_join(rfm, df_storeData) -> DATA_RFM
+view(DATA_RFM)
+```
+
+
+## Sample RFM
+```{r sample data "a"}
+rfm_data |> 
+  ungroup() |> 
+  mutate(
+    recency_interval = cut2(recency, g=5),
+    frequency_interval = cut2(no_of_transaction, g=5),
+    monetary_intervel = cut2(totalSales, g=5),
+    
+    recency_score1 = as.integer(recency_interval),
+    
+    recency_score2 = ntile(recency, 5),
+    recency_score = as.integer(fct_rev(recency_interval)),
+
+    
+    frequency_score = as.integer(frequency_interval),
+    frequency_score2 = ntile(no_of_transaction, 5),
+    
+    monetary_score = as.integer(monetary_intervel),
+    monetary_score2 = ntile(totalSales, 5) ,
+   
+ 
+   Score = (recency_score*100)+ (frequency_score*10)+(monetary_score),
+  Score2 = paste(recency_score2,frequency_score2,monetary_score2)
+  ) -> a
+    
+  
+
+```
+
+## Sample RFM
+```{r sample data "b"}
+rfm_data |> 
+  ungroup() |> 
+  mutate(
+    recency_interval = cut2(recency, g=5),
+    frequency_interval = cut2(no_of_transaction, g=5),
+    monetary_intervel = cut2(totalSales, g=5),
+    recency_score = as.integer(fct_rev(recency_interval)),
+    frequency_score = as.integer(frequency_interval),
+    monetary_score = as.integer(monetary_intervel),
+    Score = (recency_score*100)+ (frequency_score*10)+(monetary_score),
+    Score2 = paste(recency_score,frequency_score,monetary_score),
+    segmentation = case_when(
+      #current, frequent, large revenue
+      Score %in% c(555, 554, 544, 545, 454, 455, 445) ~ 'Champions',
+      ##Continuous Revenue
+      Score %in% c(543, 444, 435, 355, 354, 345, 344, 335) ~ 'Active Customer',
+      #Recent customers, but spent a good amount and bought more than once.
+      Score %in% c(553, 551, 552, 541, 542, 533, 532, 531, 452, 451, 442, 441, 431, 453, 433,
+                   432, 423, 353, 352, 351, 342, 341, 333, 323) ~ 'Potential Loyals',
+      #Bought most recently, but not often.New customer always make small purchases.
+      Score %in% c(512, 511, 422, 421, 412, 411, 311) ~ "New Customers",
+      #Recent shoppers, but haven't spent much or not often.
+      Score %in% c(525, 524, 523, 522, 521, 515, 514, 513, 425,424, 413,414,415, 315, 314, 313) ~ "Promising",
+      #Above average recency, frequency and monetary values. May not have bought very recently though
+      Score %in% c(535, 534, 443, 434, 343, 334, 325, 324) ~ "Need Attention",
+      #Below average recency, frequency and monetary values. Will lose them if not reactivated.
+      Score %in% c(331, 321, 312, 221, 213, 231, 241, 251) ~ "About To Sleep",
+      #Spent big money and purchased often. But long time ago. Need to bring them back!
+      Score %in% c(255, 254, 245, 244, 253, 252, 243, 242, 235, 234, 225, 224, 153, 152, 145,
+      143, 142, 135, 134, 133, 125, 124) ~ "At Risk",
+      #Made biggest purchases, and often. But haven't returned for a long time. We can not loss them.
+      Score %in% c(155, 154, 144, 214,215,115, 114, 113) ~ "Inactive",
+      #Last purchase was long back, low spenders and low number of orders.
+      Score %in% c(332, 322, 233, 232, 223, 222, 132, 123, 122, 212, 211) ~ "Hibernating customers",
+      #not current, rare, low revenue
+      Score %in% c(111, 112, 121, 131,141,151) ~ "Lost customers"
+    )
+
+  ) -> b
+
+  
+
+```
+Problems:
+Score = (recency_score*100)+ (frequency_score*10)+(monetary_score) ?
+Can not make segments on Score2 = paste(recency_score,frequency_score,monetary_score), give NA values
+
+## RFM Segmentation 
+```{r rfm segment }
+rfm_data |> 
+  ungroup() |> 
+  mutate(
+    recency_interval = cut2(recency, g=5),
+    frequency_interval = cut2(no_of_transaction, g=5),
+    monetary_intervel = cut2(totalSales, g=5),
+    recency_score = as.integer(fct_rev(recency_interval)),
+    frequency_score = as.integer(frequency_interval),
+    monetary_score = as.integer(monetary_intervel),
+    RFM_Score = (recency_score*100)+ (frequency_score*10)+(monetary_score),
+    RFM_Segments = case_when(
+      #current, frequent, large revenue
+      RFM_Score %in% c(555, 554, 544, 545, 454, 455, 445) ~ 'Champions',
+      ##Continuous Revenue
+      RFM_Score %in% c(543, 444, 435, 355, 354, 345, 344, 335) ~ 'Active Customer',
+      #Recent customers, but spent a good amount and bought more than once.
+      RFM_Score %in% c(553, 551, 552, 541, 542, 533, 532, 531, 452, 451, 442, 441, 431, 453, 433,
+                   432, 423, 353, 352, 351, 342, 341, 333, 323) ~ 'Potential Loyals',
+      #Bought most recently, but not often.New customer always make small purchases.
+      RFM_Score %in% c(512, 511, 422, 421, 412, 411, 311) ~ "New Customers",
+      #Recent shoppers, but haven't spent much or not often.
+      RFM_Score %in% c(525, 524, 523, 522, 521, 515, 514, 513, 425,424, 413,414,415, 315, 314, 313) ~ "Promising",
+      #Above average recency, frequency and monetary values. May not have bought very recently though
+      RFM_Score %in% c(535, 534, 443, 434, 343, 334, 325, 324) ~ "Need Attention",
+      #Below average recency, frequency and monetary values. Will lose them if not reactivated.
+      RFM_Score %in% c(331, 321, 312, 221, 213, 231, 241, 251) ~ "About To Sleep",
+      #Spent big money and purchased often. But long time ago. Need to bring them back!
+      RFM_Score %in% c(255, 254, 245, 244, 253, 252, 243, 242, 235, 234, 225, 224, 153, 152, 145,
+      143, 142, 135, 134, 133, 125, 124) ~ "At Risk",
+      #Made biggest purchases, and often. But haven't returned for a long time. We can not loss them.
+      RFM_Score %in% c(155, 154, 144, 214,215,115, 114, 113) ~ "Inactive",
+      #Last purchase was long back, low spenders and low number of orders.
+      RFM_Score %in% c(332, 322, 233, 232, 223, 222, 132, 123, 122, 212, 211) ~ "Hibernating customers",
+      #not current, rare, low revenue
+      RFM_Score %in% c(111, 112, 121, 131,141,151) ~ "Lost customers" 
+    )) -> rfm
+
+rfm |> 
+  group_by(RFM_Segments) |> 
+  mutate(customers_per_segment = table(RFM_Segments)) -> rfm
+  view(rfm)
+  
+
+```
+
+
+## No of Customer in each Segment (SHINY)
+```{r number of each segment}
+
+table(rfm['RFM_Segments'])
+
+rfm %>%
+  filter(!is.na(RFM_Segments)) %>%
+  group_by(RFM_Segments) %>% 
+  count() -> ax
+ggplot(ax, aes(x = RFM_Segments, y = n)) + 
+ geom_bar(stat="sum")
++
+```
+
+## .rds .csv
+```{r save rfm in .rds extension}
+readr::write_rds(rfm,"../R codes/rfm_analysis.rds")
+write.csv(rfm, file = "RFM Analysis.csv", row.names = FALSE)
+```
+
+## .csv
+```{r}
+	write.csv(DATA_RFM, file = "RFM Analysis ALL.csv", row.names = FALSE)
+```
+
+## .csv
+```{r}
+write.csv(rfm2, file = "RFM no of customer in segment.csv", row.names = FALSE)
+```
+
+## Sample RFM Segment Percentage
+```{r percentage of rfm segmentation with "b"}
+b |> 
+  group_by(segmentation) |> 
+  summarise(segment_tabl = table(segmentation)) |> 
+  mutate(prop_segmen = prop.table(segment_tabl)*100 ) |> 
+  mutate(percent_se = round(prop_segmen)) |> 
+  mutate(p_se = paste0(percent_se, "%")) |> 
+view()
+
+```
+
+## Segment %
+```{r }
+rfm |> 
+  group_by(RFM_Segments) |> 
+  summarise(segment_tabl = table(RFM_Segments)) |> 
+  mutate(prop_segmen = prop.table(segment_tabl)*100 ) |> 
+  mutate(percent_se = round(prop_segmen)) |> 
+  mutate(p_se = paste0(percent_se, "%")) -> RFMpercent
+view(RFMpercent) 
+```
+
+```{r}
+RFMpercent %>%
+  select(RFM_Segments, p_se) -> RFMpercent1
+view(RFMpercent1)
+	write.csv(RFMpercent1, file = "RFM Percentage.csv", row.names = FALSE)
+```
+
+##
+```{r}
+
+RFMpercent1 %>%
+  
+  ggplot(RFMpercent1, mapping = aes(x= RFM_Segments, y= p_se, fill = RFM_Segments)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start = 0)
+  
+  
+```
+
+```{r}
+RFMpercent1 %>%
+  
+  ggplot() +
+  geom_bar(aes(x= "", y= p_se, fill = RFM_Segments),stat = "identity", position = 'stack') +
+  
+  coord_polar("y", start = 0)+
+  geom_text(aes(x= "", y= p_se, label = p_se), position = position_stack(vjust = 0.4), colour = 'white')+
+
+  #geom_text(aes(x= "", y= p_se, label = p_se, hjust= 1.2), colour = 'white')+
+  theme_void() # remove background, grid, numeric labels
+```
+
+
+```{r}
+
+xvalue <- RFMpercent1$RFM_Segments
+yvalue <- RFMpercent1$p_se
+bar <- plot_ly(
+  x= xvalue,
+  y= yvalue,
+  type = "bar",
+  text = xvalue ,
+  orientation = "h",
+text = xvalue,
+textposition = "inside",
+insidetextanchor = "middle",
+insidetextfont = list(color = "#000000"),
+showlegend = F) %>%
+layout(
+xaxis = list(title = "Studies"),
+yaxis = list(zeroline = FALSE,showline = FALSE,showticklabels = FALSE)
+)
+
+```
+
+## Total sales by segment (SHINY)
+```{r Total sales by segment}
+rfm %>%
+group_by(customer_id, RFM_Segments) %>% summarise(Segment_Tsales = sum(totalSales))->segment_sales
+ #ggplot(segment_sales) + 
+  #           geom_point(aes(x=RFM_Segments, y= Segment_Tsales), color = 'red')
+ #theme(axis.text.x = element_text(angle = 65, vjust = 0.6))
+  ggplot(segment_sales, aes(x=RFM_Segments, y =Segment_Tsales, fill =Segment_Tsales ))+
+    geom_bar(aes(x=RFM_Segments), stat = "sum", position = "dodge")+
+    theme(axis.text.x = element_text(angle = 25, vjust = 0.6))
+    
+  
+```
+
+
+```{r}
+rfm2 %>%
+group_by(RFM_Segments)  %>% summarise(n= sum(no_of_transaction))-> segment_n_sales
+view(segment_n_sales)
+
+```
+
+## Join tables
+```{r}
+left_join(customer_data, rfm) -> rfm2
+view(rfm2)
+```
+
+## .rds
+```{r}
+readr::write_rds(rfm2,"../R codes/rfm2_join.rds")
+```
+
+## Average Money
+```{r Average Money }
+
+rfm |> 
+  group_by(RFM_Segments) |> 
+ summarise(Average_Money= median(totalSales)) |> 
+rename(Segments = RFM_Segments, Average_Money = Average_Money) -> sample1
+view(sample1)
+
+write.csv(sample1, file = "Average Money by Segment.csv", row.names = FALSE)
+
+plotly::ggplotly(
+sample1 |> 
+ggplot(sample1, mapping= aes(x= Segments, Average_Money)) +
+    geom_bar(stat = "identity") +
+    xlab("Segment") + ylab("Average Monetary Value") +
+    ggtitle("Avg Money Value") +
+    coord_flip() +
+    theme(
+      plot.title = element_text(hjust = 0.5)
+    )
+)
+
+
+```
+
+## .rds
+```{r}
+readr::write_rds(sample1,"../R codes/sample1.rds")
+```
+
+## Average Recency
+```{r Average Recency}
+rfm |> 
+  group_by(RFM_Segments) |> 
+ summarise(Average_Recency= median(recency)) |> 
+rename(Segments = RFM_Segments, Average_Recency = Average_Recency) -> sample2
+view(sample2)
+
+write.csv(sample2, file = "Average Recency by Segment.csv", row.names = FALSE)
+
+plotly::ggplotly(
+sample2 |> 
+ggplot(sample2, mapping= aes(x= Segments, Average_Recency)) +
+    geom_bar(stat = "identity") +
+    xlab("Segment") + ylab("Average Recency Value") +
+    ggtitle("Average Recency Value") +
+    coord_flip() +
+    theme(
+      plot.title = element_text(hjust = 0.5)
+    )
+)
+readr::write_rds(sample2,"../R codes/sample2.rds")
+
+```
+
+## Average Frequency
+```{r Average Frequency}
+rfm |> 
+  group_by(RFM_Segments) |> 
+ summarise(Average_Frequency= median(no_of_transaction)) |> 
+rename(Segments = RFM_Segments, Average_Frequency = Average_Frequency) -> sample3
+view(sample3)
+
+write.csv(sample3, file = "Average Freq by Segment.csv", row.names = FALSE)
+
+plotly::ggplotly(
+sample3 |> 
+ggplot(sample3, mapping= aes(x= Segments, Average_Frequency)) +
+    geom_bar(stat = "identity") +
+    xlab("Segment") + ylab("Average Frequency Value") +
+    ggtitle("Average Frequency Value") +
+    coord_flip() +
+    theme(
+      plot.title = element_text(hjust = 0.5)
+    )
+)
+readr::write_rds(sample3,"../R codes/sample3.rds")
+
+
+
+```
+
+## Average R, F, M of whole data
+```{r}
+rfm |> 
+  ungroup() |> 
+  summarise(
+    avg_recency = median(recency),
+    avg_freq = median(no_of_transaction),
+    avg_money = median(totalSales) 
+  ) |> 
+  view() -> RFMavg
+write.csv(RFMavg, file = "Average R F M of data.csv", row.names = FALSE)
+
+```
+
+
+```{r}
+RFMpercent1 %>% 
+  pull(RFM_Segments) %>% 
+  fct_count() %>% 
+  rename(RFM_Segments = f, count = n) %>% 
+  ggdonutchart("count", label = "device", fill = "device", color = "white",
+               palette = c("#00AFBB", "#E7B800", "#FC4E07"))
+```
+## .rds
+```{r}
+readr::write_rds(RFMpercent1,"../R codes/rfm_percentage1.rds")
+```
+
+## .rds
+```{r}
+readr::write_rds(rfm,"../R codes/rfm_percentage.rds")
+```
+
+## Practice RFM Segment Percentage
+```{r percentage of rfm segmentation }
+segment_table <- table(rfm$RFM_Segments) 
+view(segment_table)
+prop_segment <- prop.table(segment_table) *100
+View(prop_segment)
+percent_seg <- round(prop_segment)
+view(percent_seg)
+p_seg <- paste0(percent_seg,"%")
+view(p_seg)
+```
+
+## RFM Visualization
+```{r RFM Analysis Graph}
+rfm |> 
+  treemap(rfm, index=c("RFM_Segments"), vSize="RFM_Score", algorithm="squarified", title = "RFM Analysis", border.col=c("white"), border.lwds=c(0) , fontsize.labels=c(11), fontcolor.labels=c("black"), fontface.labels=c(1) )
+  
+```
+Note:
+Font of labels: 1,2,3,4 for normal, bold, italic, bold-italic...b
+
+
+## Max Shipment
+```{r}
+
+df_storeData |> 
+  group_by(customer_id, ship_mode) |> 
+  summarise(
+   n = table(ship_mode)
+  ) |> 
+  mutate(max_shipment = names(n)[which.max(n)]) -> max_data 
+  view(max_data)
+write.csv(max_data, file = "Customer Max Shipment.csv", row.names = FALSE)
+
+  
+  
+```
+
+
+## Max Category
+```{r}
+df_storeData |> 
+  group_by(customer_id, category) |> 
+  summarise(
+    n = table(category)
+  ) |>
+  mutate(
+    max_category = names(n)[which.max(n)]) -> max_data2
+  view(max_data2)
+write.csv(max_data2, file = "Customer Max Category.csv", row.names = FALSE)
+```
+
